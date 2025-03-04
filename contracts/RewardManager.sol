@@ -2,16 +2,15 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-
-contract RewardManager is Ownable{
+import "./AccessControl.sol";
+contract RewardManager is AccessControl{
     IERC20 public rewardToken;
     uint256 public epochDuration = 1 days;
     uint256 public currentEpoch;
     uint256 public lastEpochTime;
     uint256 public totalStaked;
-    uint256 public earlyUnstakeFee = 10;
-
+    address public tokenVault;
+    
     struct StakePosition {
         uint256 amount;
         uint256 startEpoch;
@@ -27,15 +26,15 @@ contract RewardManager is Ownable{
     mapping(address => uint256) public rewards;
     mapping(address => StakePosition[]) public userStakes;
     mapping(address => uint256) public userLastCheckpoint;
-    mapping(address => uint256) public stakeLock;
 
     event RewardClaimed(address indexed user, uint256 reward);
     event EpochUpdated(uint256 newEpoch, uint256 timestamp);
     event StakeAdded(address indexed user, uint256 amount, uint256 epoch);
-    event RewardRateUpdated(uint256 startEpoch, uint256 newRewardRate);
     event Unstaked(address indexed user, uint256 amount, uint256 fee);
+    event TokenVaultUpdated(address indexed newVault);
+    event RewardRateUpdated(address indexed admin, uint256 startEpoch, uint256 newRewardRate);
 
-    constructor(address _rewardToken, uint256 _initialRewardRate, uint256 _epochDuration) Ownable(msg.sender){
+    constructor(address _rewardToken, uint256 _initialRewardRate, uint256 _epochDuration){
         require(_rewardToken != address(0), "Invalid reward token address");
         rewardToken = IERC20(_rewardToken);
         epochDuration = _epochDuration;
@@ -58,7 +57,18 @@ contract RewardManager is Ownable{
         _;   
     }
 
-    function updateRewardRate(uint256 newRewardRate) external onlyOwner updateEpoch {
+    modifier onlyTokenVault() {
+        require(msg.sender == address(tokenVault), "Only TokenVault can call this function");
+        _;
+    }
+
+    function setTokenVault(address _tokenVault) external onlyAdmin {
+        require(_tokenVault != address(0), "Invalid TokenVault address");
+        tokenVault = _tokenVault;
+        emit TokenVaultUpdated(_tokenVault);
+    }
+
+    function updateRewardRate(uint256 newRewardRate) external onlyAdmin updateEpoch {
         uint256 lastCheckpointIndex = rewardCheckpoints.length - 1;
         RewardCheckpoint storage lastCheckpoint = rewardCheckpoints[lastCheckpointIndex];
 
@@ -73,14 +83,13 @@ contract RewardManager is Ownable{
             cumulativeRewardPerToken: rewardCheckpoints[lastCheckpointIndex].cumulativeRewardPerToken
         }));
 
-        emit RewardRateUpdated(currentEpoch, newRewardRate);
+        emit RewardRateUpdated(msg.sender, currentEpoch, newRewardRate);
     }
 
     
-    function addStakePosition(uint256 _amount) external updateEpoch{
+    function addStakePosition(address user, uint256 _amount) external onlyTokenVault updateEpoch{
         require(_amount > 0, "Amount must be greater than 0");
 
-        address user = msg.sender;
         updateUserReward(user);
 
         userStakes[user].push(StakePosition({
@@ -121,7 +130,7 @@ contract RewardManager is Ownable{
             totalBalance += stakes[i].amount;
     }
 
-    function claimRewards(address _user) external returns (uint256) {
+    function claimRewards(address _user) external onlyTokenVault returns (uint256) {
         updateUserReward(_user);
 
         uint256 reward = rewards[_user];
@@ -134,6 +143,16 @@ contract RewardManager is Ownable{
 
         return reward;
     }
+
+    function unstakePosition(address user, uint256 _amount) external onlyTokenVault {
+    require(_amount > 0, "Amount must be greater than 0");
+    require(calculateUserBalance(user) >= _amount, "Insufficient staked balance");
+
+    totalStaked -= _amount;
+
+    emit Unstaked(user, _amount, 0);
+}
+
 
     function viewReward(address _user) external view returns(uint256){
         uint256 lastCheckpoint = userLastCheckpoint[_user];
