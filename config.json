@@ -1,0 +1,9 @@
+{
+  "dev": {},
+  "bsctest": {
+    "NauhToken": "0xf102d5625FaC843716387F4d122eA11294e655a0",
+    "RewardManager": "0x6c2124313c0CA97e6Ea931c67E0D63268b84289c",
+    "TokenVault": "0x757Db843873E1a1DFbe9d149e022cB8b0b617e7F"
+  },
+  "main": {}
+}
