@@ -27,6 +27,5 @@ contract AccessControl is Ownable {
 
     function isAdmin(address _admin) external view returns (bool) {
         return admins[_admin] || (_admin == owner());
-
     }
 }
