@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.ts --network",
+    "deploy": "hardhat run ignition/modules/deploy.ts --network",
     "test": "hardhat test",
     "verify": "hardhat verify --network"
   },
