@@ -2,15 +2,17 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./AccessControl.sol";
-contract RewardManager is AccessControl{
+import "./MyAccessControl.sol";
+contract RewardManager is MyAccessControl{
     IERC20 public rewardToken;
     uint256 public epochDuration = 1 days;
     uint256 public currentEpoch;
     uint256 public lastEpochTime;
     uint256 public totalStaked;
     address public tokenVault;
-    
+
+    bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
+
     struct StakePosition {
         uint256 amount;
         uint256 startEpoch;
@@ -45,6 +47,8 @@ contract RewardManager is AccessControl{
             rewardRate: _initialRewardRate,
             cumulativeRewardPerToken: 0
         }));
+
+         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     modifier updateEpoch(){
@@ -62,13 +66,13 @@ contract RewardManager is AccessControl{
         _;
     }
 
-    function setTokenVault(address _tokenVault) external onlyAdmin {
+    function setTokenVault(address _tokenVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_tokenVault != address(0), "Invalid TokenVault address");
         tokenVault = _tokenVault;
         emit TokenVaultUpdated(_tokenVault);
     }
 
-    function updateRewardRate(uint256 newRewardRate) external onlyAdmin updateEpoch {
+    function updateRewardRate(uint256 newRewardRate) external onlyRole(ADMIN_ROLE) updateEpoch {
         uint256 lastCheckpointIndex = rewardCheckpoints.length - 1;
         RewardCheckpoint storage lastCheckpoint = rewardCheckpoints[lastCheckpointIndex];
 
@@ -87,7 +91,7 @@ contract RewardManager is AccessControl{
     }
 
     
-    function addStakePosition(address user, uint256 _amount) external onlyTokenVault updateEpoch{
+    function addStakePosition(address user, uint256 _amount) external onlyRole(VAULT_ROLE) updateEpoch{
         require(_amount > 0, "Amount must be greater than 0");
 
         updateUserReward(user);
@@ -130,7 +134,7 @@ contract RewardManager is AccessControl{
             totalBalance += stakes[i].amount;
     }
 
-    function claimRewards(address _user) external onlyTokenVault returns (uint256) {
+    function claimRewards(address _user) external onlyRole(VAULT_ROLE) returns (uint256) {
         updateUserReward(_user);
 
         uint256 reward = rewards[_user];
@@ -144,7 +148,7 @@ contract RewardManager is AccessControl{
         return reward;
     }
 
-    function unstakePosition(address user, uint256 _amount) external onlyTokenVault {
+    function unstakePosition(address user, uint256 _amount) external onlyRole(VAULT_ROLE) {
     require(_amount > 0, "Amount must be greater than 0");
     require(calculateUserBalance(user) >= _amount, "Insufficient staked balance");
 

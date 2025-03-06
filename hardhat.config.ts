@@ -20,6 +20,9 @@ const config: HardhatUserConfig = {
       gasPrice: 5000000000,
     },
   },
+  etherscan: {
+    apiKey: process.env.BSC_API_KEY,
+  },
 };
 
 export default config;

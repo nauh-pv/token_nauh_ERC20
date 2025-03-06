@@ -3,8 +3,9 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./RewardManager.sol";
+import "./MyAccessControl.sol";
 
-contract TokenVault is AccessControl {
+contract TokenVault is MyAccessControl {
     IERC20 public vaultToken;
     RewardManager public rewardManager;
     uint256 public unstakeLockDuration = 7 days;
@@ -25,6 +26,7 @@ contract TokenVault is AccessControl {
 
         vaultToken = IERC20(_vaultToken);
         rewardManager = RewardManager(_rewardManager);
+         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     function deposit(uint256 _amount) external {
