@@ -34,6 +34,7 @@ async function main() {
   await tokenVault.waitForDeployment();
   console.log(`✅ TokenVault deployed at: ${tokenVault.target}`);
   Config.setConfig(network + ".TokenVault", await tokenVault.getAddress());
+  await Config.updateConfig();
 }
 
 main().catch((error) => {

@@ -1,9 +1,9 @@
 {
   "dev": {},
   "bsctest": {
-    "NauhToken": "0xf102d5625FaC843716387F4d122eA11294e655a0",
-    "RewardManager": "0x6c2124313c0CA97e6Ea931c67E0D63268b84289c",
-    "TokenVault": "0x757Db843873E1a1DFbe9d149e022cB8b0b617e7F"
+    "NauhToken": "0x4dd486931058A3125e290e2b0eF0f20670f51aa7",
+    "RewardManager": "0xD467E5Dc26A2e57dde549CF0C8FCa120Dc0dBb34",
+    "TokenVault": "0x600f9939C1b347062e49cC68a7e99af0ce7Eb3Cf"
   },
   "main": {}
 }
