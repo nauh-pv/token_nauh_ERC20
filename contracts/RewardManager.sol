@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import "hardhat/console.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./MyAccessControl.sol";
 contract RewardManager is MyAccessControl{
@@ -73,27 +75,35 @@ contract RewardManager is MyAccessControl{
     }
 
     function updateRewardRate(uint256 newRewardRate) external onlyRole(ADMIN_ROLE) updateEpoch {
-        uint256 lastCheckpointIndex = rewardCheckpoints.length - 1;
-        RewardCheckpoint storage lastCheckpoint = rewardCheckpoints[lastCheckpointIndex];
+        if (rewardCheckpoints.length == 0) {
+            rewardCheckpoints.push(RewardCheckpoint({
+                epoch: currentEpoch,
+                rewardRate: newRewardRate,
+                cumulativeRewardPerToken: 0
+            }));
+        } else {
+            uint256 lastCheckpointIndex = rewardCheckpoints.length - 1;
+            RewardCheckpoint storage lastCheckpoint = rewardCheckpoints[lastCheckpointIndex];
 
-        if(totalStaked >0){
-            uint256 rewardPerToken = lastCheckpoint.cumulativeRewardPerToken + (lastCheckpoint.rewardRate * epochDuration) / totalStaked;
-            rewardCheckpoints[lastCheckpointIndex].cumulativeRewardPerToken = rewardPerToken;
+            uint256 rewardPerToken = lastCheckpoint.cumulativeRewardPerToken;
+
+            if (totalStaked > 0) {
+                rewardPerToken += (lastCheckpoint.rewardRate * epochDuration) / totalStaked;
+            }
+
+            rewardCheckpoints.push(RewardCheckpoint({
+                epoch: currentEpoch,
+                rewardRate: newRewardRate,
+                cumulativeRewardPerToken: rewardPerToken
+            }));
         }
 
-         rewardCheckpoints.push(RewardCheckpoint({
-            epoch: currentEpoch,
-            rewardRate: newRewardRate,
-            cumulativeRewardPerToken: rewardCheckpoints[lastCheckpointIndex].cumulativeRewardPerToken
-        }));
-
+        require(rewardCheckpoints.length > 0, "Checkpoint was not created!");
         emit RewardRateUpdated(msg.sender, currentEpoch, newRewardRate);
     }
-
     
     function addStakePosition(address user, uint256 _amount) external onlyRole(VAULT_ROLE) updateEpoch{
         require(_amount > 0, "Amount must be greater than 0");
-
         updateUserReward(user);
 
         userStakes[user].push(StakePosition({
@@ -107,16 +117,18 @@ contract RewardManager is MyAccessControl{
     }
 
     function updateUserReward(address user) internal{
-        uint256 lastCheckpoint = userLastCheckpoint[user];
+        uint256 lastCheckpoint = userLastCheckpoint[user] > 0 ? userLastCheckpoint[user] : 1; 
         uint256 newCheckpoint = currentEpoch;
 
-        if(lastCheckpoint < newCheckpoint){
-            uint256 userBalance = calculateUserBalance(user);
-            uint256 reward = (getCumulativeRewardPerToken(newCheckpoint) - getCumulativeRewardPerToken(lastCheckpoint)) * userBalance;
+        if (lastCheckpoint < newCheckpoint) {
+        uint256 userBalance = calculateUserBalance(user);
+        uint256 rewardPerTokenOld = getCumulativeRewardPerToken(lastCheckpoint);
+        uint256 rewardPerTokenNew = getCumulativeRewardPerToken(newCheckpoint);
 
-            rewards[user] += reward;
-            userLastCheckpoint[user] = newCheckpoint;
-        }
+        uint256 reward = (rewardPerTokenNew - rewardPerTokenOld) * userBalance / 1e18;
+        rewards[user] += reward;
+        userLastCheckpoint[user] = newCheckpoint;
+    }
     }
 
     function getCumulativeRewardPerToken(uint256 epoch) public view returns (uint256) {
@@ -129,9 +141,10 @@ contract RewardManager is MyAccessControl{
     }
 
     function calculateUserBalance(address user) public view returns (uint256 totalBalance){
-        StakePosition[] storage stakes = userStakes[user];
-        for(uint256 i = 0; i< stakes.length; i ++)
-            totalBalance += stakes[i].amount;
+        uint256 stakeLength = userStakes[user].length;
+        for (uint256 i = 0; i < stakeLength; i++) {
+            totalBalance += userStakes[user][i].amount;
+        }
     }
 
     function claimRewards(address _user) external onlyRole(VAULT_ROLE) returns (uint256) {
@@ -141,30 +154,44 @@ contract RewardManager is MyAccessControl{
         require(reward > 0, "No rewards to claim!");
 
         rewards[_user] = 0;
-        require(rewardToken.transfer(_user, reward), "Reward transfer failed");
+        userLastCheckpoint[_user] = currentEpoch;
 
+        require(rewardToken.transfer(_user, reward), "Reward transfer failed");
         emit RewardClaimed(_user, reward);
 
         return reward;
     }
 
     function unstakePosition(address user, uint256 _amount) external onlyRole(VAULT_ROLE) {
-    require(_amount > 0, "Amount must be greater than 0");
-    require(calculateUserBalance(user) >= _amount, "Insufficient staked balance");
+        require(_amount > 0, "Amount must be greater than 0");
+        require(calculateUserBalance(user) >= _amount, "Insufficient staked balance");
 
-    totalStaked -= _amount;
+        uint256 remaining = _amount;
+        StakePosition[] storage stakes = userStakes[user];
 
-    emit Unstaked(user, _amount, 0);
-}
+        for (uint256 i = 0; i < stakes.length && remaining > 0; ) {
+            if (stakes[i].amount > remaining) {
+                stakes[i].amount -= remaining;
+                remaining = 0;
+            } else {
+                remaining -= stakes[i].amount;
+                stakes[i] = stakes[stakes.length - 1];
+                stakes.pop();
+            }
+        }
 
+        totalStaked -= _amount;
 
-    function viewReward(address _user) external view returns(uint256){
-        uint256 lastCheckpoint = userLastCheckpoint[_user];
-        uint256 newCheckpoint = currentEpoch;
+        emit Unstaked(user, _amount, 0);
+    }
+
+    function viewReward(address _user) external view returns (uint256) {
+        uint256 lastCheckpoint = userLastCheckpoint[_user] > 0 ? userLastCheckpoint[_user] : 1;
+        uint256 epochToCheck = currentEpoch;
         uint256 userBalance = calculateUserBalance(_user);
-
-        uint256 reward = (getCumulativeRewardPerToken(newCheckpoint) - 
-                          getCumulativeRewardPerToken(lastCheckpoint)) * userBalance / 1e18;
+        uint256 rewardPerTokenOld = getCumulativeRewardPerToken(lastCheckpoint);
+        uint256 rewardPerTokenNew = getCumulativeRewardPerToken(epochToCheck);
+        uint256 reward = (rewardPerTokenNew - rewardPerTokenOld) * userBalance / 1e18;
 
         return rewards[_user] + reward;
     }

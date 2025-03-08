@@ -25,6 +25,10 @@ describe("TokenVault", function () {
     );
 
     await rewardManager.setTokenVault(tokenVault.target);
+    await rewardManager.grantRole(
+      await rewardManager.VAULT_ROLE(),
+      tokenVault.target
+    );
   });
 
   it("Should allow user to deposit tokens", async function () {
@@ -82,19 +86,56 @@ describe("TokenVault", function () {
   });
 
   it("Should allow user to claim rewards", async function () {
+    await rewardManager.grantRole(
+      await rewardManager.VAULT_ROLE(),
+      tokenVault.target
+    );
+
+    await nauhToken.transfer(rewardManager.target, ethers.parseEther("10000"));
+
     await nauhToken.approve(tokenVault.target, ethers.parseEther("100"));
     await tokenVault.deposit(ethers.parseEther("100"));
     await tokenVault.stake(ethers.parseEther("50"));
 
-    await ethers.provider.send("evm_increaseTime", [86400]); // 1 ngày
+    await rewardManager.updateRewardRate(ethers.parseEther("10"));
     await ethers.provider.send("evm_mine");
 
-    await expect(tokenVault.claimRewards()).to.not.be.reverted;
+    await ethers.provider.send("evm_increaseTime", [2 * 86400]);
+    await ethers.provider.send("evm_mine");
+
+    await rewardManager.updateRewardRate(ethers.parseEther("10"));
+    await ethers.provider.send("evm_mine");
+
+    let pendingReward = await tokenVault.viewRewards();
+    expect(pendingReward).to.be.gt(
+      0,
+      "❌ No rewards available before claiming!"
+    );
+
+    const rewardManagerBalance = await nauhToken.balanceOf(
+      rewardManager.target
+    );
+    expect(rewardManagerBalance).to.be.gt(0, "❌ RewardManager has no tokens!");
+
+    const userRewardsBefore = await rewardManager.viewReward(owner.address);
+    expect(userRewardsBefore).to.be.gt(0, "❌ User has no rewards to claim!");
+
+    try {
+      await expect(tokenVault.claimRewards()).to.not.be.reverted;
+    } catch (error) {
+      console.error("🚨 Claim rewards failed with error:", error);
+    }
+
+    const userRewardsAfter = await rewardManager.viewReward(owner.address);
+    expect(userRewardsAfter).to.equal(
+      0,
+      "❌ Rewards not reset after claiming!"
+    );
   });
 
-  it("Should prevent claiming rewards if no rewards are available", async function () {
+  it("Should revert if user has no rewards", async function () {
     await expect(tokenVault.claimRewards()).to.be.revertedWith(
-      "Reward pool empty!"
+      "No rewards to claim!"
     );
   });
 

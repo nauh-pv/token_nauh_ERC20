@@ -81,4 +81,8 @@ contract TokenVault is MyAccessControl {
 
         emit RewardsClaimed(msg.sender, reward);
     }
+
+    function viewRewards() external view returns (uint256) {
+        return rewardManager.viewReward(msg.sender);
+    }
 }

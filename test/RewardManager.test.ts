@@ -33,7 +33,10 @@ describe("RewardManager", function () {
   it("Should not allow non-admin to set token vault", async function () {
     await expect(
       rewardManager.connect(user1).setTokenVault(user1.address)
-    ).to.be.revertedWith("AccessControl: account");
+    ).to.be.revertedWithCustomError(
+      rewardManager,
+      "AccessControlUnauthorizedAccount"
+    );
   });
 
   it("Should update reward rate", async function () {

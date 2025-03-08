@@ -32,6 +32,9 @@ describe("NauhToken", function () {
   it("Should not allow non-admin to set token vault", async function () {
     await expect(
       nauhToken.connect(user1).setTokenVault(user2.address)
-    ).to.be.revertedWith("AccessControl: account");
+    ).to.be.revertedWithCustomError(
+      nauhToken,
+      "AccessControlUnauthorizedAccount"
+    );
   });
 });
